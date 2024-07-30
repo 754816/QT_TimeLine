@@ -18,7 +18,6 @@ void MainWindow::InitUI()
     QDateTime datetime = QDateTime::currentDateTime();
     ui->dateTimeEdit->setDateTime(datetime);
     ui->widget->SetDateTime(datetime);
-    ui->widget->setStyleSheet(QString("QWidget{background-color:rgb(160,160,160)}"));
 }
 void MainWindow::InitConnect()
 {
@@ -29,9 +28,17 @@ void MainWindow::InitConnect()
         ui->widget->SetTimeInterval(true);
     });
     connect(ui->widget, &MyTimeLine::TimeChangeSignal, this, [=](QDateTime dateTime){
-        ui->dateTimeEdit->setDateTime(dateTime);
+        if(ui->dateTimeEdit->dateTime() != dateTime)
+            ui->dateTimeEdit->setDateTime(dateTime);
     });
     connect(ui->dateTimeEdit, &QDateTimeEdit::dateTimeChanged, this, [=](QDateTime datetime){
         ui->widget->SetDateTime(datetime);
     });
+
+    m_Timer = new QTimer(this);
+    connect(m_Timer, &QTimer::timeout, this, [=](){
+        QDateTime curDateTime = QDateTime::currentDateTime();
+        ui->widget->SetDateTime(curDateTime);
+    });
+    m_Timer->start(500);
 }

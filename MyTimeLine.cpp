@@ -2,7 +2,7 @@
 
 MyTimeLine::MyTimeLine(QWidget *parent) :
     QWidget(parent),
-    m_IntervalType(_OneMin),
+    m_IntervalType(_OneHour),
     m_BeginX(0),
     m_totalX(0),
     m_MoveX(0),
@@ -24,6 +24,21 @@ void MyTimeLine::InitializeUI()
     m_label->setHidden(true);
     m_label->resize(60, 20);
     this->setMouseTracking(true);
+
+    QDate date = QDate::currentDate();
+    TimeInfo_t tempInfo1;
+    tempInfo1.beginTime = QDateTime(date, QTime(20,0,0));
+    tempInfo1.endTime = QDateTime(date, QTime(22,0,0));
+    TimeInfo_t tempInfo2;
+    tempInfo2.beginTime = QDateTime(date, QTime(8,0,0));
+    tempInfo2.endTime = QDateTime(date, QTime(10,35,0));
+    TimeInfo_t tempInfo3;
+    tempInfo3.beginTime = QDateTime(date, QTime(11,11,11));
+    tempInfo3.endTime = QDateTime(date, QTime(12,34,56));
+    TimeInfo_t tempInfo4;
+    tempInfo4.beginTime = QDateTime(date, QTime(16,25,25));
+    tempInfo4.endTime = QDateTime(date, QTime(16,26,26));
+    m_VodVec = {tempInfo1, tempInfo2, tempInfo3, tempInfo4};
 }
 void MyTimeLine::SetTimeInterval(TimeInterval type)
 {
@@ -31,6 +46,7 @@ void MyTimeLine::SetTimeInterval(TimeInterval type)
 }
 void MyTimeLine::SetTimeInterval(bool badd)
 {
+
     QList<TimeInterval> list = {_OneMin, _FiveMin, _TenMin, _ThirtyMin, _OneHour, _TwoHour};
     int index = list.indexOf(m_IntervalType);
     if(0 < index && index < list.size() - 1)
@@ -54,6 +70,7 @@ void MyTimeLine::SetTimeInterval(bool badd)
 void MyTimeLine::SetDateTime(QDateTime dateTime)
 {
     if(m_bMoving) return;
+    if(m_dateTime == dateTime && m_LastIntervalType == m_IntervalType) return;
     m_dateTime = dateTime;
     m_BeginX = 0;
     m_totalX = 0;
@@ -65,11 +82,23 @@ void MyTimeLine::paintEvent(QPaintEvent *event)
 {
     QVector<QLine> lines;
     QVector<TextInfo_t> textInfo;
-    CalInterval(lines, textInfo);
-    //STEP 1 ：先绘制间隔
-    QPen pen(TimeLineStyle::green);
+    QVector<QRect> VodTimes;
+    CalInterval(lines, textInfo, VodTimes);
+
     QPainter painter(this);
+    QPen pen;
+    //STEP 1 ：先绘制时间片
+    pen.setColor(TimeLineStyle::TransGreen);
+    QBrush brush1(TimeLineStyle::TransGreen);
+    painter.setBrush(brush1);
     painter.setPen(pen);
+    painter.drawRects(VodTimes);
+
+    //STEP 2 ：再绘制竖线和文字
+    pen.setColor(TimeLineStyle::green);
+    QBrush brush2(TimeLineStyle::green);
+    painter.setPen(pen);
+    painter.setBrush(brush2);
     painter.drawLines(lines);
     //最终绘制文本时，向左偏移23个像素，让文字居中显示
     for(auto iter : textInfo)
@@ -77,7 +106,7 @@ void MyTimeLine::paintEvent(QPaintEvent *event)
         iter.point.setX(iter.point.x() - 23);
         painter.drawText(iter.point, iter.text);
     }
-    //STEP 2 ：再绘制中间红线，设置为>2，界面显示更加合理一些
+    //STEP 3 ：再绘制中间红线，设置为>2，界面显示更加合理一些
     pen.setWidth(1);
     pen.setColor(TimeLineStyle::red);
     painter.setPen(pen);
@@ -135,7 +164,7 @@ void MyTimeLine::mouseReleaseEvent(QMouseEvent *event)
         m_MoveX = m_totalX;
     }
 }
-void MyTimeLine::CalInterval(QVector<QLine> &lines, QVector<TextInfo_t>& textInfo)
+void MyTimeLine::CalInterval(QVector<QLine> &lines, QVector<TextInfo_t>& textInfo, QVector<QRect>& VodRects)
 {
     //lines允许超出size的坐标，x < 0 || x > size().width()
     //STEP 1: 添加红线。如果是奇数长度，则红线在偏左，右边比左边大1px，偶数则相等；
@@ -196,15 +225,17 @@ void MyTimeLine::CalInterval(QVector<QLine> &lines, QVector<TextInfo_t>& textInf
         info.text = CalText(i, m_dateTime, moveRatio);
         textInfo.push_back(info);
     }
+    //STEP 7: 将时间片转换为QRect
+    VodRects = CalVodRects();
 }
 
-double MyTimeLine::CalMoveRatio(int movepix, QDateTime datetime, double moveRatio)
+double MyTimeLine::CalMoveRatio(int movepix, QDateTime datetime, double blockWidth)
 {
     int interval = m_IntervalType;
     //t1:鼠标累计的偏移像素; t2:非整点时间的偏移位置
     double t1, t2;
-    if(0 == moveRatio) t1 = 0;
-    else t1 = (double)movepix / moveRatio;
+    if(0 == blockWidth) t1 = 0;
+    else t1 = (double)movepix / blockWidth;
     int ss = 0;
     if(_OneHour == m_IntervalType)
     {
@@ -239,9 +270,12 @@ double MyTimeLine::CalMoveRatio(int movepix, QDateTime datetime, double moveRati
     //计算经过鼠标偏移后，实时显示的时间，及时发送，避免信号内容覆盖
     m_MoveDateTime = DateTimeUtil::sub(datetime, t1 * interval);
     emit TimeChangeSignal(m_MoveDateTime);
+    //发送后更新本次绘制的时间和时间间隔，用来下次判断
+    m_LastIntervalType = m_IntervalType;
+    m_LastMoveDateTime = m_MoveDateTime;
     return t;
 }
-QString MyTimeLine::CalText(const int index, const QDateTime midDateTime, const int moveBlockSize)
+QString MyTimeLine::CalText(const int index, const QDateTime midDateTime, const int moveRatio)
 {
     QTime time(0,0,0);
     //STEP 1: 将时间按照间隔进行取模处理,例如间隔为1h，12:34:56处理后为12:00:00, 间隔30分钟，处理后12:30:00
@@ -280,7 +314,7 @@ QString MyTimeLine::CalText(const int index, const QDateTime midDateTime, const 
     QDateTime LeftTime = DateTimeUtil::sub(IntegerTime, (TimeLineStyle::TimeCount / 2) * m_IntervalType);
 
     //STEP 3: 根据偏移量，更新最左边的时间
-    QDateTime MoveLeftTime = DateTimeUtil::sub(LeftTime, -1 * moveBlockSize * m_IntervalType);
+    QDateTime MoveLeftTime = DateTimeUtil::sub(LeftTime, -1 * moveRatio * m_IntervalType);
 
     //STEP 4: 根据index，计算i个间隔后的时间
     time = DateTimeUtil::sub(MoveLeftTime, -1 * index * m_IntervalType).time();
@@ -290,6 +324,28 @@ QString MyTimeLine::CalText(const int index, const QDateTime midDateTime, const 
     //         << "  MoveLeftTime" << MoveLeftTime.time().toString("hh:mm:ss")
     //         << "  time" << time.toString("hh:mm:ss");
     return time.toString("hh:mm:ss");
+}
+QVector<QRect> MyTimeLine::CalVodRects()
+{
+    auto func_px = [&](QDateTime time)
+    {
+        int px = 0;
+        int mid =  this->size().width() / 2;
+        qint64 t1 = time.toSecsSinceEpoch() - m_MoveDateTime.toSecsSinceEpoch();
+        double ratio = (double)t1 / (double)m_IntervalType;
+        px = ratio * m_blockWidth + this->size().width() / 2;
+        return px;
+    };
+    int TimeLineHeight = this->size().height();
+    QVector<QRect> VodRects;
+    for(auto iter : m_VodVec)
+    {
+        int begin = func_px(iter.beginTime);
+        int end = func_px(iter.endTime) - begin;
+        VodRects.push_back(QRect(begin, 0,  end, TimeLineHeight));
+        //qDebug () << "begin:" << begin << "end:" << end;
+    }
+    return VodRects;
 }
 QString MyTimeLine::CalMouseTime(QPoint p)
 {

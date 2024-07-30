@@ -19,6 +19,11 @@ struct TextInfo_t
     QPoint point;
     QString text;
 };
+struct TimeInfo_t
+{
+    QDateTime beginTime;      //时间片开始时间
+    QDateTime endTime;        //结束时间
+};
 namespace TimeLineStyle
 {
     const QDateTime beginDateTime = QDateTime::fromString("2024-08-23 12:34:56", "yyyy-MM-dd hh:mm:ss");        //不具备展示意义，只是给为了给dateTime赋一个初始值
@@ -29,6 +34,7 @@ namespace TimeLineStyle
     const int MarginSize = 10;                          //两边预留范围，避免两头text被完全遮盖
     const int TextHeight = 11;                          //text显示高度
     const QColor red = QColor(220, 20, 20);             //红色
-    const QColor green = QColor(150, 220, 100);          //绿色
+    const QColor green = QColor(150, 220, 100);         //绿色
+    const QColor TransGreen = QColor(150, 220, 100, 80);//半透明绿色
 }
 #endif // TIMELINESTYLE_H

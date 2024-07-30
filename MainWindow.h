@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -20,5 +21,6 @@ private:
 
 private:
     Ui::MainWindow *ui;
+    QTimer* m_Timer;
 };
 #endif // MAINWINDOW_H
